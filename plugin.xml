@@ -1,0 +1,18 @@
+<library path="src">
+    <class name="BagBrowser"
+           type="rqt_bag_browser.bag_browser.BagBrowser"
+           base_class_type="rqt_gui_py::Plugin">
+        <description>
+            GUI for bag files.
+        </description>
+        <qtgui>
+            <group>
+                <label>My Tools</label>
+                <icon type="theme">folder</icon>
+            </group>
+            <label>Bag browser</label>
+            <icon type="theme">system-search</icon>
+            <statustip>GUI for bag files.</statustip>
+        </qtgui>
+    </class>
+</library>
