@@ -19,6 +19,8 @@ class BagBrowserWidget(QWidget):
         self._updateTimer = QTimer(self)
         self._updateTimer.timeout.connect(self.timeout_callback)
 
+
+
     def start(self):
         self._updateTimer.start(10)  # loop rate[ms]
 
