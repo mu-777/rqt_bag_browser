@@ -8,22 +8,29 @@ from python_qt_binding import loadUi
 from python_qt_binding.QtCore import Qt, QTimer, Signal, Slot, QDir
 from python_qt_binding.QtWidgets import QWidget, QFileDialog, QFileSystemModel, QMessageBox
 import rospkg
+import rosbag
 
-from .baginfo_manager import BagInfoModel, BagViewerWidget
-
+from .baginfo_manager import BagInfoModel, BagInfoViewWidget
+from .bagplayer_manager import BagPlayerWidget
 
 class BagPathModel(object):
     def __init__(self, current_dir=None):
         self._current_dir = current_dir if current_dir is not None else os.environ['HOME']
-        self._current_bag = ''
+        self._current_bagname = ''
+        self._bag = None
 
     def set_cur_dir(self, dir):
         if os.path.exists(dir):
             self._current_dir = dir
 
     def set_cur_bag(self, bagname):
-        if os.path.exists(os.path.join(self.cur_dir, bagname)):
-            self._current_bag = bagname
+        if not os.path.exists(os.path.join(self.cur_dir, bagname)):
+            return
+        try:
+            self._bag = rosbag.Bag(os.path.join(self._current_dir, bagname))
+        except rosbag.bag.ROSBagException:
+            return
+        self._current_bagname = bagname
 
     def delete_file(self):
         os.remove(self.cur_bagpath)
@@ -38,12 +45,24 @@ class BagPathModel(object):
 
     @property
     def cur_bagpath(self):
-        return os.path.join(self._current_dir, self._current_bag)
+        return os.path.join(self._current_dir, self._current_bagname)
 
     @property
     def cur_bagfile(self):
-        return self._current_bag
+        return self._current_bagname
 
+    @property
+    def has_imagetopics(self):
+        if self._bag is None:
+            return False
+        for topicdata in self._bag.get_type_and_topic_info()[1].values():
+            if topicdata.msg_type == 'sensor_msgs/Image':
+                return True
+        return False
+
+    @property
+    def is_validbag(self):
+        return self._bag is not None
 
 
 class BagBrowserWidget(QWidget):
@@ -53,10 +72,11 @@ class BagBrowserWidget(QWidget):
         ui_file = os.path.join(rospkg_pack.get_path('bag_browser'), 'resource', 'BagBrowser.ui')
         loadUi(ui_file, self)
 
-        self._baginfo_view = BagViewerWidget()
+        self._baginfo_widget = BagInfoViewWidget()
+        self._bagplay_widget = BagPlayerWidget()
 
-        self._updateTimer = QTimer(self)
-        self._updateTimer.timeout.connect(self.timeout_callback)
+        # self._updateTimer = QTimer(self)
+        # self._updateTimer.timeout.connect(self.timeout_callback)
 
         self._path_model = BagPathModel()
         self._baginfo_model = BagInfoModel()
@@ -103,11 +123,11 @@ class BagBrowserWidget(QWidget):
         self.qt_file_listview.setRootIndex(index)
 
     def _update_baginfo(self, clear=False):
-        self._baginfo_view.set_loading()
+        self._baginfo_widget.set_loading()
         if clear:
-            self._baginfo_view.clear()
+            self._baginfo_widget.clear()
         else:
-            self._baginfo_view.set_info(self._baginfo_model.get_baginfo(self._path_model.cur_bagpath))
+            self._baginfo_widget.set_info(self._baginfo_model.get_baginfo(self._path_model.cur_bagpath))
 
     @Slot()
     def on_qt_fileopen_btn_clicked(self):
@@ -132,13 +152,19 @@ class BagBrowserWidget(QWidget):
 
     @Slot()
     def on_qt_showinfo_btn_clicked(self):
-        self._baginfo_view.show()
+        self._baginfo_widget.show()
         self._update_baginfo()
+
+    @Slot()
+    def on_qt_play_btn_clicked(self):
+        self._bagplay_widget.show(self._path_model.cur_bagpath)
 
     def on_qt_file_listview_clicked(self, index):
         filename = self.qt_file_listview.model().data(index)
         if os.path.splitext(filename)[1] == '.bag':
             self._path_model.set_cur_bag(filename)
+            self.qt_showinfo_btn.setEnabled(self._path_model.is_validbag)
+            self.qt_play_btn.setEnabled(self._path_model.has_imagetopics)
 
 class BagBrowser(Plugin):
     def __init__(self, context):
