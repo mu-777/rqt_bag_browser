@@ -13,6 +13,7 @@ import rosbag
 from .baginfo_manager import BagInfoModel, BagInfoViewWidget
 from .bagplayer_manager import BagPlayerWidget
 
+
 class BagPathModel(object):
     def __init__(self, current_dir=None):
         self._current_dir = current_dir if current_dir is not None else os.environ['HOME']
@@ -22,6 +23,8 @@ class BagPathModel(object):
     def set_cur_dir(self, dir):
         if os.path.exists(dir):
             self._current_dir = dir
+            self._current_bagname = ''
+            self._bag = None
 
     def set_cur_bag(self, bagname):
         if not os.path.exists(os.path.join(self.cur_dir, bagname)):
@@ -29,7 +32,7 @@ class BagPathModel(object):
         try:
             self._bag = rosbag.Bag(os.path.join(self._current_dir, bagname))
         except rosbag.bag.ROSBagException:
-            return
+            self._bag = None
         self._current_bagname = bagname
 
     def delete_file(self):
@@ -48,7 +51,7 @@ class BagPathModel(object):
         return os.path.join(self._current_dir, self._current_bagname)
 
     @property
-    def cur_bagfile(self):
+    def cur_bagfilename(self):
         return self._current_bagname
 
     @property
@@ -79,15 +82,13 @@ class BagBrowserWidget(QWidget):
         # self._updateTimer.timeout.connect(self.timeout_callback)
 
         self._path_model = BagPathModel()
-        self._baginfo_model = BagInfoModel()
         self.qt_file_listview.setModel(QFileSystemModel())
-        self.qt_file_listview.model().setFilter(QDir.Files|QDir.NoSymLinks|QDir.NoDotAndDotDot)
+        self.qt_file_listview.model().setFilter(QDir.Files | QDir.NoSymLinks | QDir.NoDotAndDotDot)
         self.qt_file_listview.model().setNameFilters(['*.bag'])
 
         self.qt_file_listview.activated.connect(self.on_qt_file_listview_clicked)
 
-        self.update_cur_dir(self._path_model.cur_dir)
-
+        self._update_cur_dir(self._path_model.cur_dir)
 
     def start(self):
         # self._updateTimer.start(10)  # loop rate[ms]
@@ -100,50 +101,52 @@ class BagBrowserWidget(QWidget):
     def timeout_callback(self):
         pass
 
-     # override
+        # override
+
     def save_settings(self, plugin_settings, instance_settings):
-        instance_settings.set_value('data', (self._path_model.cur_dir))
+        instance_settings.set_value('data', self._path_model.cur_dir)
 
     # override
     def restore_settings(self, plugin_settings, instance_settings):
         try:
             data = instance_settings.value('data')
-            self.update_cur_dir(data[0])
-        except Exception:
-            self.update_cur_dir('')
+            self._update_cur_dir(data[0])
+        except Exception as e:
+            self._update_cur_dir('')
 
     # override
     def shutdown_plugin(self):
-        pass
+        self._baginfo_widget.close()
+        self._bagplay_widget.close()
 
-    def update_cur_dir(self, dir):
+    def _update_cur_dir(self, dir):
         self._path_model.set_cur_dir(dir)
         self.qt_directory_lineedit.setText(self._path_model.cur_dir)
-        index =  self.qt_file_listview.model().setRootPath(self._path_model.cur_dir)
+        index = self.qt_file_listview.model().setRootPath(self._path_model.cur_dir)
         self.qt_file_listview.setRootIndex(index)
 
-    def _update_baginfo(self, clear=False):
-        self._baginfo_widget.set_loading()
-        if clear:
-            self._baginfo_widget.clear()
-        else:
-            self._baginfo_widget.set_info(self._baginfo_model.get_baginfo(self._path_model.cur_bagpath))
+    def _update_bagbtn_enable(self):
+        self.qt_showinfo_btn.setEnabled(self._path_model.is_validbag)
+        self.qt_delete_btn.setEnabled(self._path_model.is_validbag)
+        self.qt_play_btn.setEnabled(self._path_model.has_imagetopics)
 
     @Slot()
     def on_qt_fileopen_btn_clicked(self):
         dir = QFileDialog.getExistingDirectory(self, 'Open a folder',
                                                self._path_model.cur_dir)
-        self.update_cur_dir(dir)
+        self._update_cur_dir(dir)
+        self._update_bagbtn_enable()
 
     @Slot()
     def on_qt_directory_lineedit_returnPressed(self):
-        self.update_cur_dir(self.qt_directory_lineedit.text())
+        self._update_cur_dir(self.qt_directory_lineedit.text())
+        self._update_bagbtn_enable()
 
     @Slot()
     def on_qt_delete_btn_clicked(self):
         msgbox = QMessageBox(QMessageBox.Warning,
                              'Do you want to delete this?',
-                             'Name: {0}\nPath: {1}'.format(self._path_model.cur_bagfile,
+                             'Name: {0}\nPath: {1}'.format(self._path_model.cur_bagfilename,
                                                            self._path_model.cur_bagpath))
         msgbox.addButton('DELETE', QMessageBox.AcceptRole)
         msgbox.addButton('cancel', QMessageBox.RejectRole)
@@ -152,8 +155,7 @@ class BagBrowserWidget(QWidget):
 
     @Slot()
     def on_qt_showinfo_btn_clicked(self):
-        self._baginfo_widget.show()
-        self._update_baginfo()
+        self._baginfo_widget.show(self._path_model.cur_bagpath)
 
     @Slot()
     def on_qt_play_btn_clicked(self):
@@ -163,8 +165,8 @@ class BagBrowserWidget(QWidget):
         filename = self.qt_file_listview.model().data(index)
         if os.path.splitext(filename)[1] == '.bag':
             self._path_model.set_cur_bag(filename)
-            self.qt_showinfo_btn.setEnabled(self._path_model.is_validbag)
-            self.qt_play_btn.setEnabled(self._path_model.has_imagetopics)
+            self._update_bagbtn_enable()
+
 
 class BagBrowser(Plugin):
     def __init__(self, context):

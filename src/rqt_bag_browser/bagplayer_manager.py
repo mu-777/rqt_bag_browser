@@ -3,10 +3,14 @@
 
 import os
 import numpy as np
+from operator import add
+import cv2
 
 import rospy
 import rosbag
 import rospkg
+
+from cv_bridge import CvBridge, CvBridgeError
 
 from rqt_gui_py.plugin import Plugin
 from python_qt_binding import loadUi
@@ -17,7 +21,48 @@ from python_qt_binding.QtWidgets import QWidget, QFileDialog
 
 class BagPlayer(object):
     def __init__(self, bagpath):
-        pass
+        self._bag = rosbag.Bag(bagpath)
+        self._img_topicnames = self.get_img_topicname_list(self._bag)
+        self._imgts_list = self.get_img_timestamp_list(self._bag, self._img_topicnames)
+        self._imgs_dict = {tn: self.get_img_list(self._bag, tn,
+                                                 self._imgts_list[0],
+                                                 self._imgts_list[-1]) for tn in self._img_topicnames}
+
+    def get_imgs(self, t):
+        return [self._imgs_dict[tn][t] for tn in self._img_topicnames]
+
+    def get_length_msec(self):
+        return self._imgts_list[-1] - self._imgts_list[0] + 1
+
+    @staticmethod
+    def get_img_topicname_list(bag):
+        return sorted(
+            [td[0] for td in bag.get_type_and_topic_info()[1].items() if td[1].msg_type == 'sensor_msgs/Image'])
+
+    @staticmethod
+    def get_img_timestamp_list(bag, img_topicnames):
+        return sorted((list(set(reduce(add,
+                                       [[BagPlayer.rostime2msec(ts) for (_, msg, ts) in bag.read_messages(img_topic)]
+                                        for img_topic in img_topicnames])))))
+
+    @staticmethod
+    def get_img_list(bag, img_topicname, start_ms, end_ms):
+        l = [None] * (end_ms - start_ms + 1)
+        for (_, msg, ts) in bag.read_messages(img_topicname):
+            l[BagPlayer.rostime2msec(ts) - start_ms] = BagPlayer.rosimg2cvimg(msg)
+        return l
+
+    @staticmethod
+    def rostime2msec(rostime):
+        return int(rostime.to_sec() * 1000)
+
+    @staticmethod
+    def rosimg2cvimg(rosimg):
+        try:
+            return CvBridge().imgmsg_to_cv2(rosimg)
+        except CvBridgeError as e:
+            print e
+            return None
 
 
 class BagPlayerWidget(QWidget):
@@ -33,34 +78,57 @@ class BagPlayerWidget(QWidget):
         self._pause_icon = QIcon.fromTheme('media-playback-pause')
         self.qt_play_btn.setIcon(self._play_icon)
 
-        self.qt_play_btn.clicked[bool].connect(self._on_qt_play_btn_clicked)
+        self._playing = False
+        self._current_msec = 0
+        self._max_msec = 1000000
+
+        # self.qt_play_btn.clicked[bool].connect(self._on_qt_play_btn_clicked)
+        # self.qt_seekbar_slider.valueChanged[int].connect(self._on_qt_seekbar_slider_valchanged)
 
         self._play_timer = QTimer()
         self._play_timer.timeout.connect(self.on_idle)
-        self._play_timer.setInterval(1)
+        self._play_timer.setInterval(1)  # [ms]
+
+    def close(self):
+        self._play_timer.stop()
+        super(BagPlayerWidget, self).close()
 
     def on_idle(self):
-        pos = self.qt_seekbar_slider.value() + 1
-        if pos > self.qt_seekbar_slider.maximum():
-            pos = 0
-        self.qt_seekbar_slider.setValue(pos)
-
-    def _on_qt_play_btn_clicked(self, checked):
-        if checked:
-            self.qt_play_btn.setIcon(self._pause_icon)
-            self._play_timer.start()
-        else:
-            self.qt_play_btn.setIcon(self._play_icon)
-            self._play_timer.stop()
-
-    def update_images(self):
-        pass
+        self._current_msec = (self._current_msec + 1) % self._max_msec
+        self.qt_seekbar_slider.setValue(self._current_msec)
+        self.qt_time_numer_label.setText(str(int(self._current_msec * 0.001)))
 
     def show(self, bagpath):
         self._bag_player = BagPlayer(bagpath)
-        # self.qt_seekbar_slider.setMinimum(0)
-        # self.qt_seekbar_slider.setMaximum(int(self._bag_player.get_length_msec()))
-        # self.qt_seekbar_slider.setValue(0)
         self.qt_filename_label.setText(os.path.basename(bagpath))
-        self.update_images()
+
+        self._max_msec = self._bag_player.get_length_msec()
+        self.qt_seekbar_slider.setMinimum(0)
+        self.qt_seekbar_slider.setMaximum(self._max_msec - 1)
+        self.qt_seekbar_slider.setValue(0)
+        self.qt_time_numer_label.setText(str(0))
+        self.qt_time_denom_label.setText('/{0}[s]'.format(int(self._max_msec * 0.001)))
+
+        self.update_images(self.qt_seekbar_slider.value())
         super(BagPlayerWidget, self).show()
+
+    def update_images(self, t):
+        # t = self.qt_seekbar_slider.value()
+        self.qt_time_numer_label.setText(str(int(t * 0.001)))
+        # img = self._bag_player.get_imgs(t)[0]
+        # if img is not None:
+        #     cv2.imshow('', img)
+
+    def _on_qt_seekbar_slider_valchanged(self, val):
+        self.update_images(val)
+
+    @Slot()
+    def on_qt_play_btn_clicked(self):
+        if not self._playing:
+            self.qt_play_btn.setIcon(self._pause_icon)
+            self._play_timer.start()
+            self._playing = True
+        else:
+            self.qt_play_btn.setIcon(self._play_icon)
+            self._play_timer.stop()
+            self._playing = False

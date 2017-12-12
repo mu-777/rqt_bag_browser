@@ -14,30 +14,29 @@ from python_qt_binding.QtCore import Qt, QTimer, Signal, Slot
 from python_qt_binding.QtWidgets import QWidget, QFileDialog
 
 
-
 class BagInfoModel():
-    def __init__(self):
-        pass
+    def __init__(self, bagpath):
+        self.bagpath = bagpath
 
-    def get_baginfo(self, bagpath):
+    def get_info_iterator(self):
         info = ''
-        if not os.path.exists(bagpath):
-            rospy.loginfo("Not found bag file: " + bagpath)
-            info = "Not found bag file\n  " + bagpath
+        if not os.path.exists(self.bagpath):
+            rospy.loginfo("Not found bag file: " + self.bagpath)
+            info = iter(["Not found bag file\n  " + self.bagpath])
             return info
 
         try:
-            targetbag = rosbag.Bag(bagpath)
+            targetbag = rosbag.Bag(self.bagpath)
         except rosbag.bag.ROSBagUnindexedException as e:
             rospy.logerr(e)
-            rospy.logerr("Broken bag file: " + bagpath)
-            info = "!! Broken bag file !!\n  " + bagpath
+            rospy.logerr("Broken bag file: " + self.bagpath)
+            info = iter(["!! Broken bag file !!\n  " + self.bagpath])
         else:
             try:
                 info = self._parse_baginfo(targetbag)
             except (rosbag.bag.ROSBagFormatException, ValueError) as e:
                 rospy.logerr(e)
-                info = targetbag._get_yaml_info()
+                info = iter([targetbag._get_yaml_info()])
         return info
 
     @staticmethod
@@ -61,7 +60,7 @@ class BagInfoModel():
             ms_periods = [int((m1.header.stamp.to_nsec() - m0.header.stamp.to_nsec())
                               * 0.001) * 0.001 for m1, m0 in zip(msgs[1:], msgs[:-1])]
             seq_periods = [m1.header.seq - m0.header.seq for m1,
-                           m0 in zip(msgs[1:], msgs[:-1])]
+                                                             m0 in zip(msgs[1:], msgs[:-1])]
             for key, periods in zip(["difftime", "diffseq"], [ms_periods, seq_periods]):
                 stats[key]["ave"] = np.average(periods)
                 stats[key]["med"] = np.median(periods)
@@ -93,10 +92,12 @@ class BagInfoModel():
         info += 'size: {}\n'.format(format_size(bag.size))
         info += 'time: {0:.3f} sec\n'.format(get_duration(bag))
         info += separator
+        yield info
 
         for topic in sorted(set([c.topic for c in bag._get_connections()])):
             info += 'topic: {0} ({1})\n'.format(topic,
                                                 list(bag._get_connections(topic))[0].datatype)
+            yield info
             try:
                 stats = get_stats(topic)
             except AttributeError as e:
@@ -104,19 +105,20 @@ class BagInfoModel():
             else:
                 info += indent + 'messages: {0:d}\n'.format(stats["msgnum"])
                 info += indent + \
-                    'frequency: {0:.3f} fps\n'.format(stats["freq"])
+                        'frequency: {0:.3f} fps\n'.format(stats["freq"])
                 info += indent + 'diff_time[ms]:\n'
                 info += indent * 2 + \
-                    '{}\n'.format(format_diff(stats["difftime"]))
+                        '{}\n'.format(format_diff(stats["difftime"]))
                 info += indent + 'diff_seq:\n'
                 info += indent * 2 + \
-                    '{}\n'.format(format_diff(stats["diffseq"]))
+                        '{}\n'.format(format_diff(stats["diffseq"]))
             info += separator
-        return info
+            yield info
 
-class BagViewerWidget(QWidget):
+
+class BagInfoViewWidget(QWidget):
     def __init__(self):
-        super(BagViewerWidget, self).__init__()
+        super(BagInfoViewWidget, self).__init__()
         rospkg_pack = rospkg.RosPack()
         ui_file = os.path.join(rospkg_pack.get_path('bag_browser'),
                                'resource',
@@ -138,4 +140,11 @@ class BagViewerWidget(QWidget):
     def clear(self):
         self.qt_info_label.setText('')
 
+    def show(self, bagpath):
+        super(BagInfoViewWidget, self).show()
+        self.set_loading()
+        self._bag_info = BagInfoModel(bagpath)
 
+        for info in self._bag_info.get_info_iterator():
+            print info
+            self.set_info(info)

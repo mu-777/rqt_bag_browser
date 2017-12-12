@@ -84,6 +84,32 @@
          </property>
         </widget>
        </item>
+       <item>
+        <widget class="QLabel" name="qt_time_numer_label">
+         <property name="sizePolicy">
+          <sizepolicy hsizetype="Minimum" vsizetype="Preferred">
+           <horstretch>0</horstretch>
+           <verstretch>0</verstretch>
+          </sizepolicy>
+         </property>
+         <property name="text">
+          <string>numer</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QLabel" name="qt_time_denom_label">
+         <property name="sizePolicy">
+          <sizepolicy hsizetype="Minimum" vsizetype="Preferred">
+           <horstretch>0</horstretch>
+           <verstretch>0</verstretch>
+          </sizepolicy>
+         </property>
+         <property name="text">
+          <string>/ denom</string>
+         </property>
+        </widget>
+       </item>
       </layout>
      </item>
      <item>
