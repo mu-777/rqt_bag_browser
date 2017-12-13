@@ -81,22 +81,21 @@ class BagPlayerWidget(QWidget):
         self._playing = False
         self._current_msec = 0
         self._max_msec = 1000000
-
-        # self.qt_play_btn.clicked[bool].connect(self._on_qt_play_btn_clicked)
-        # self.qt_seekbar_slider.valueChanged[int].connect(self._on_qt_seekbar_slider_valchanged)
+        self.qt_seekbar_slider.setTracking(False)
 
         self._play_timer = QTimer()
-        self._play_timer.timeout.connect(self.on_idle)
+        self._play_timer.timeout.connect(self.on_image_update)
         self._play_timer.setInterval(1)  # [ms]
+
+        self._gui_timer = QTimer()
+        self._gui_timer.timeout.connect(self.on_gui_update)
+        self._gui_timer.setInterval(100)  # [ms]
+        self._gui_timer.start()
 
     def close(self):
         self._play_timer.stop()
+        self._gui_timer.stop()
         super(BagPlayerWidget, self).close()
-
-    def on_idle(self):
-        self._current_msec = (self._current_msec + 1) % self._max_msec
-        self.qt_seekbar_slider.setValue(self._current_msec)
-        self.qt_time_numer_label.setText(str(int(self._current_msec * 0.001)))
 
     def show(self, bagpath):
         self._bag_player = BagPlayer(bagpath)
@@ -112,23 +111,42 @@ class BagPlayerWidget(QWidget):
         self.update_images(self.qt_seekbar_slider.value())
         super(BagPlayerWidget, self).show()
 
-    def update_images(self, t):
-        # t = self.qt_seekbar_slider.value()
-        self.qt_time_numer_label.setText(str(int(t * 0.001)))
-        # img = self._bag_player.get_imgs(t)[0]
-        # if img is not None:
-        #     cv2.imshow('', img)
+    def on_image_update(self):
+        self._current_msec = (self._current_msec + 1) % self._max_msec
+        self.update_images(self._current_msec)
 
-    def _on_qt_seekbar_slider_valchanged(self, val):
-        self.update_images(val)
+    def on_gui_update(self):
+        t = self._current_msec
+        self.qt_seekbar_slider.setValue(t)
+        self.qt_time_numer_label.setText('{0:.1f}'.format(t * 0.001))
+
+    def update_images(self, t):
+        img = self._bag_player.get_imgs(t)[0]
+        if img is not None:
+            cv2.imshow('', img)
+
+    @Slot()
+    def on_qt_seekbar_slider_sliderPressed(self):
+        self._play_timer.stop()
+        self._gui_timer.stop()
+        self.qt_seekbar_slider.setTracking(True)
+
+    @Slot()
+    def on_qt_seekbar_slider_sliderReleased(self):
+        self._current_msec = self.qt_seekbar_slider.value()
+        self.qt_seekbar_slider.setTracking(False)
+        if self._playing:
+            self._play_timer.start()
+        else:
+            self._play_timer.stop()
+        self._gui_timer.start()
 
     @Slot()
     def on_qt_play_btn_clicked(self):
         if not self._playing:
             self.qt_play_btn.setIcon(self._pause_icon)
             self._play_timer.start()
-            self._playing = True
         else:
             self.qt_play_btn.setIcon(self._play_icon)
             self._play_timer.stop()
-            self._playing = False
+        self._playing = not self._playing
