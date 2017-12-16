@@ -113,7 +113,7 @@
       </layout>
      </item>
      <item>
-      <layout class="QVBoxLayout" name="qt_images_layout"/>
+      <layout class="QGridLayout" name="qt_imgs_gridlayout"/>
      </item>
     </layout>
    </item>

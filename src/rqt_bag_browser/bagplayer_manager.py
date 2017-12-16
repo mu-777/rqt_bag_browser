@@ -2,34 +2,34 @@
 # -*- coding: utf-8 -*-
 
 import os
-import numpy as np
 from operator import add
 import cv2
 
-import rospy
 import rosbag
 import rospkg
 
 from cv_bridge import CvBridge, CvBridgeError
 
-from rqt_gui_py.plugin import Plugin
 from python_qt_binding import loadUi
 from python_qt_binding.QtCore import Qt, QTimer, Signal, Slot
-from python_qt_binding.QtGui import QIcon
+from python_qt_binding.QtGui import QIcon, QImage, QPixmap
 from python_qt_binding.QtWidgets import QWidget, QFileDialog
 
 
 class BagPlayer(object):
-    def __init__(self, bagpath):
+    def __init__(self, bagpath, converter):
         self._bag = rosbag.Bag(bagpath)
         self._img_topicnames = self.get_img_topicname_list(self._bag)
         self._imgts_list = self.get_img_timestamp_list(self._bag, self._img_topicnames)
         self._imgs_dict = {tn: self.get_img_list(self._bag, tn,
-                                                 self._imgts_list[0],
-                                                 self._imgts_list[-1]) for tn in self._img_topicnames}
+                                                 self._imgts_list[0], self._imgts_list[-1],
+                                                 converter) for tn in self._img_topicnames}
+
+    def get_names(self):
+        return self._img_topicnames
 
     def get_imgs(self, t):
-        return [self._imgs_dict[tn][t] for tn in self._img_topicnames]
+        return [self._imgs_dict[tn][t] for tn in self._img_topicnames], self._img_topicnames
 
     def get_length_msec(self):
         return self._imgts_list[-1] - self._imgts_list[0] + 1
@@ -46,10 +46,10 @@ class BagPlayer(object):
                                         for img_topic in img_topicnames])))))
 
     @staticmethod
-    def get_img_list(bag, img_topicname, start_ms, end_ms):
+    def get_img_list(bag, img_topicname, start_ms, end_ms, converter):
         l = [None] * (end_ms - start_ms + 1)
         for (_, msg, ts) in bag.read_messages(img_topicname):
-            l[BagPlayer.rostime2msec(ts) - start_ms] = BagPlayer.rosimg2cvimg(msg)
+            l[BagPlayer.rostime2msec(ts) - start_ms] = converter(msg)
         return l
 
     @staticmethod
@@ -63,6 +63,22 @@ class BagPlayer(object):
         except CvBridgeError as e:
             print e
             return None
+
+
+class ImageViewWidget(QWidget):
+    def __init__(self):
+        super(ImageViewWidget, self).__init__()
+        rospkg_pack = rospkg.RosPack()
+        ui_file = os.path.join(rospkg_pack.get_path('bag_browser'),
+                               'resource',
+                               'ImageView.ui')
+        loadUi(ui_file, self)
+
+    def set_title(self, title):
+        self.qt_imgtitle_label.setText(title)
+
+    def set_image(self, pixmap):
+        self.qt_img_label.setPixmap(pixmap)
 
 
 class BagPlayerWidget(QWidget):
@@ -98,7 +114,12 @@ class BagPlayerWidget(QWidget):
         super(BagPlayerWidget, self).close()
 
     def show(self, bagpath):
-        self._bag_player = BagPlayer(bagpath)
+        def converter(rosimg):
+            cvimg = BagPlayer.rosimg2cvimg(rosimg)
+            height, width = cvimg.shape
+            return QPixmap.fromImage(QImage(cvimg.data, width, height, QImage.Format_Grayscale8))
+
+        self._bag_player = BagPlayer(bagpath, converter)
         self.qt_filename_label.setText(os.path.basename(bagpath))
 
         self._max_msec = self._bag_player.get_length_msec()
@@ -107,6 +128,11 @@ class BagPlayerWidget(QWidget):
         self.qt_seekbar_slider.setValue(0)
         self.qt_time_numer_label.setText(str(0))
         self.qt_time_denom_label.setText('/{0}[s]'.format(int(self._max_msec * 0.001)))
+
+        self.image_widgets = {}
+        for i, name in enumerate(self._bag_player.get_names()):
+            self.image_widgets[name] = ImageViewWidget()
+            self.qt_imgs_gridlayout.addWidget(self.image_widgets[name], i/2, i%2)
 
         self.update_images(self.qt_seekbar_slider.value())
         super(BagPlayerWidget, self).show()
@@ -121,9 +147,10 @@ class BagPlayerWidget(QWidget):
         self.qt_time_numer_label.setText('{0:.1f}'.format(t * 0.001))
 
     def update_images(self, t):
-        img = self._bag_player.get_imgs(t)[0]
-        if img is not None:
-            cv2.imshow('', img)
+        for img, name in zip(self._bag_player.get_imgs(t)):
+            if img is None:
+                continue
+            self.image_widgets[name].set_image(img)
 
     @Slot()
     def on_qt_seekbar_slider_sliderPressed(self):
