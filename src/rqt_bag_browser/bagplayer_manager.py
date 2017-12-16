@@ -66,13 +66,17 @@ class BagPlayer(object):
 
 
 class ImageViewWidget(QWidget):
-    def __init__(self):
+    def __init__(self, title=None, image=None):
         super(ImageViewWidget, self).__init__()
         rospkg_pack = rospkg.RosPack()
         ui_file = os.path.join(rospkg_pack.get_path('bag_browser'),
                                'resource',
                                'ImageView.ui')
         loadUi(ui_file, self)
+        if title is not None:
+            self.set_title(title)
+        if image is not None:
+            self.set_title(image)
 
     def set_title(self, title):
         self.qt_imgtitle_label.setText(title)
@@ -131,8 +135,9 @@ class BagPlayerWidget(QWidget):
 
         self.image_widgets = {}
         for i, name in enumerate(self._bag_player.get_names()):
-            self.image_widgets[name] = ImageViewWidget()
+            self.image_widgets[name] = ImageViewWidget(title=name)
             self.qt_imgs_gridlayout.addWidget(self.image_widgets[name], i/2, i%2)
+        self.qt_imgs_gridlayout.setSpacing(3)
 
         self.update_images(self.qt_seekbar_slider.value())
         super(BagPlayerWidget, self).show()
@@ -147,7 +152,8 @@ class BagPlayerWidget(QWidget):
         self.qt_time_numer_label.setText('{0:.1f}'.format(t * 0.001))
 
     def update_images(self, t):
-        for img, name in zip(self._bag_player.get_imgs(t)):
+        imgs, names = self._bag_player.get_imgs(t)
+        for img, name in zip(imgs, names):
             if img is None:
                 continue
             self.image_widgets[name].set_image(img)

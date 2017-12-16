@@ -57,6 +57,9 @@
       </widget>
      </item>
      <item>
+      <layout class="QGridLayout" name="qt_imgs_gridlayout"/>
+     </item>
+     <item>
       <layout class="QHBoxLayout" name="horizontalLayout">
        <property name="sizeConstraint">
         <enum>QLayout::SetFixedSize</enum>
@@ -111,9 +114,6 @@
         </widget>
        </item>
       </layout>
-     </item>
-     <item>
-      <layout class="QGridLayout" name="qt_imgs_gridlayout"/>
      </item>
     </layout>
    </item>
