@@ -20,9 +20,9 @@ class BagPlayer(object):
     def __init__(self, bagpath, converter):
         self._bag = rosbag.Bag(bagpath)
         self._img_topicnames = self.get_img_topicname_list(self._bag)
-        self._imgts_list = self.get_img_timestamp_list(self._bag, self._img_topicnames)
+        self._timestamp_list = self.get_img_timestamp_list(self._bag, self._img_topicnames)
         self._imgs_dict = {tn: self.get_img_list(self._bag, tn,
-                                                 self._imgts_list[0], self._imgts_list[-1],
+                                                 self._timestamp_list[0], self._timestamp_list[-1],
                                                  converter) for tn in self._img_topicnames}
 
     def get_names(self):
@@ -32,7 +32,10 @@ class BagPlayer(object):
         return [self._imgs_dict[tn][t] for tn in self._img_topicnames], self._img_topicnames
 
     def get_length_msec(self):
-        return self._imgts_list[-1] - self._imgts_list[0] + 1
+        return self._timestamp_list[-1] - self._timestamp_list[0] + 1
+
+    def get_timestamps(self):
+        return self._timestamp_list
 
     @staticmethod
     def get_img_topicname_list(bag):
@@ -99,8 +102,6 @@ class BagPlayerWidget(QWidget):
         self.qt_play_btn.setIcon(self._play_icon)
 
         self._playing = False
-        self._current_msec = 0
-        self._max_msec = 1000000
         self.qt_seekbar_slider.setTracking(False)
 
         self._play_timer = QTimer()
@@ -131,19 +132,32 @@ class BagPlayerWidget(QWidget):
         self.qt_seekbar_slider.setMaximum(self._max_msec - 1)
         self.qt_seekbar_slider.setValue(0)
         self.qt_time_numer_label.setText(str(0))
-        self.qt_time_denom_label.setText('/{0}[s]'.format(int(self._max_msec * 0.001)))
+        self.qt_time_denom_label.setText('/{0:.1f}[s]'.format(int(self._max_msec * 0.001)))
 
         self.image_widgets = {}
         for i, name in enumerate(self._bag_player.get_names()):
             self.image_widgets[name] = ImageViewWidget(title=name)
-            self.qt_imgs_gridlayout.addWidget(self.image_widgets[name], i/2, i%2)
+            self.qt_imgs_gridlayout.addWidget(self.image_widgets[name], i / 2, i % 2)
         self.qt_imgs_gridlayout.setSpacing(3)
 
+        timestamps = self._bag_player.get_timestamps()
+        self._timestamps = [t - timestamps[0] for t in timestamps]
+        self._diff_msecs = [a - b for a, b in zip(self._timestamps[1:],
+                                                  self._timestamps[:-1])]
+        self.counter = 0
+        self.qt_seekbar_slider.setValue(0)
+        self._current_msec = 0
         self.update_images(self.qt_seekbar_slider.value())
         super(BagPlayerWidget, self).show()
 
     def on_image_update(self):
-        self._current_msec = (self._current_msec + 1) % self._max_msec
+        if len(self._diff_msecs) > self.counter + 1:
+            self._current_msec = self._current_msec + self._diff_msecs[self.counter]
+            self.counter += 1
+        else:
+            self._current_msec = 0
+            self.counter = 0
+        self._play_timer.setInterval(self._diff_msecs[self.counter])
         self.update_images(self._current_msec)
 
     def on_gui_update(self):
@@ -166,7 +180,13 @@ class BagPlayerWidget(QWidget):
 
     @Slot()
     def on_qt_seekbar_slider_sliderReleased(self):
-        self._current_msec = self.qt_seekbar_slider.value()
+        val = self.qt_seekbar_slider.value()
+        for i, ts in enumerate(self._timestamps):
+            if ts > val:
+                self._current_msec = self._timestamps[max(i-1, 0)]
+                self.counter = i - 1
+                break
+        self.update_images(self._current_msec)
         self.qt_seekbar_slider.setTracking(False)
         if self._playing:
             self._play_timer.start()
