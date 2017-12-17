@@ -2,16 +2,22 @@
 # -*- coding: utf-8 -*-
 
 import os
+import sys
 
 from rqt_gui_py.plugin import Plugin
 from python_qt_binding import loadUi
 from python_qt_binding.QtCore import Qt, QTimer, Signal, Slot, QDir
-from python_qt_binding.QtWidgets import QWidget, QFileDialog, QFileSystemModel, QMessageBox
+from python_qt_binding.QtWidgets import QWidget, QFileDialog, QFileSystemModel, QMessageBox, QApplication, QMainWindow
 import rospkg
 import rosbag
 
-from .baginfo_manager import BagInfoModel, BagInfoViewWidget
-from .bagplayer_manager import BagPlayerWidget
+try:
+    from .baginfo_manager import BagInfoModel, BagInfoViewWidget
+    from .bagplayer_manager import BagPlayerWidget
+except ValueError:
+    sys.path.append(os.path.abspath(os.path.dirname(__file__)))
+    from baginfo_manager import BagInfoModel, BagInfoViewWidget
+    from bagplayer_manager import BagPlayerWidget
 
 
 class BagPathModel(object):
@@ -184,3 +190,29 @@ class BagBrowser(Plugin):
 
     def shutdown_plugin(self):
         self._widget.shutdown_plugin()
+
+
+class BagBrowserMainWidget(QMainWindow):
+    def __init__(self):
+        super(BagBrowserMainWidget, self).__init__()
+        self.setObjectName('BagBrowser')
+        self._widget = BagBrowserWidget(self)
+        self._widget.start()
+        self.setCentralWidget(self._widget)
+
+    def save_settings(self, plugin_settings, instance_settings):
+        self._widget.save_settings(plugin_settings, instance_settings)
+
+    def restore_settings(self, plugin_settings, instance_settings):
+        self._widget.restore_settings(plugin_settings, instance_settings)
+
+    def shutdown_plugin(self):
+        self._widget.shutdown_plugin()
+
+
+# --------------------------------------------
+if __name__ == '__main__':
+    app = QApplication(sys.argv)
+    mw = BagBrowserMainWidget()
+    mw.show()
+    sys.exit(app.exec_())

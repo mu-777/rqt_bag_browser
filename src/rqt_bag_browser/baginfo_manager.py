@@ -24,7 +24,6 @@ class BagInfoModel():
             rospy.loginfo("Not found bag file: " + self.bagpath)
             info = iter(["Not found bag file\n  " + self.bagpath])
             return info
-
         try:
             targetbag = rosbag.Bag(self.bagpath)
         except rosbag.bag.ROSBagUnindexedException as e:
