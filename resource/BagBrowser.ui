@@ -9,8 +9,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>487</width>
-    <height>410</height>
+    <width>830</width>
+    <height>441</height>
    </rect>
   </property>
   <property name="sizePolicy">
@@ -64,7 +64,8 @@
           <string/>
          </property>
          <property name="icon">
-          <iconset theme="folder"/>
+          <iconset theme="folder">
+           <normaloff>.</normaloff>.</iconset>
          </property>
          <property name="iconSize">
           <size>
@@ -93,7 +94,8 @@
           <string/>
          </property>
          <property name="icon">
-          <iconset theme="media-playback-start"/>
+          <iconset theme="media-playback-start">
+           <normaloff>.</normaloff>.</iconset>
          </property>
          <property name="iconSize">
           <size>
@@ -118,7 +120,8 @@
           <string/>
          </property>
          <property name="icon">
-          <iconset theme="dialog-information"/>
+          <iconset theme="dialog-information">
+           <normaloff>.</normaloff>.</iconset>
          </property>
          <property name="iconSize">
           <size>
@@ -147,7 +150,8 @@
           <string/>
          </property>
          <property name="icon">
-          <iconset theme="edit-delete"/>
+          <iconset theme="edit-delete">
+           <normaloff>.</normaloff>.</iconset>
          </property>
          <property name="iconSize">
           <size>

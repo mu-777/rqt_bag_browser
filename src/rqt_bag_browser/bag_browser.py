@@ -3,10 +3,12 @@
 
 import os
 import sys
+import signal
 
 from rqt_gui_py.plugin import Plugin
 from python_qt_binding import loadUi
 from python_qt_binding.QtCore import Qt, QTimer, Signal, Slot, QDir
+from python_qt_binding.QtGui import QIcon
 from python_qt_binding.QtWidgets import QWidget, QFileDialog, QFileSystemModel, QMessageBox, QApplication, QMainWindow
 import rospkg
 import rosbag
@@ -212,7 +214,16 @@ class BagBrowserMainWidget(QMainWindow):
 
 # --------------------------------------------
 if __name__ == '__main__':
+
+    def sigint_handler(*args):
+        if QMessageBox.question(None, '', "Are you sure you want to quit?",
+                                QMessageBox.Yes | QMessageBox.No,
+                                QMessageBox.No) == QMessageBox.Yes:
+            QApplication.quit()
+    signal.signal(signal.SIGINT, sigint_handler)
+
     app = QApplication(sys.argv)
     mw = BagBrowserMainWidget()
+    mw.setWindowIcon(QIcon.fromTheme('system-search'))
     mw.show()
     sys.exit(app.exec_())
