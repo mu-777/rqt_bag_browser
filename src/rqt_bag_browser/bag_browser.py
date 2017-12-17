@@ -214,16 +214,20 @@ class BagBrowserMainWidget(QMainWindow):
 
 # --------------------------------------------
 if __name__ == '__main__':
-
     def sigint_handler(*args):
-        if QMessageBox.question(None, '', "Are you sure you want to quit?",
-                                QMessageBox.Yes | QMessageBox.No,
-                                QMessageBox.No) == QMessageBox.Yes:
-            QApplication.quit()
+        # if QMessageBox.question(None, '', "Are you sure you want to quit?",
+        #                         QMessageBox.Yes | QMessageBox.No,
+        #                         QMessageBox.No) == QMessageBox.Yes:
+        #     QApplication.quit()
+        QApplication.quit()
+
+
     signal.signal(signal.SIGINT, sigint_handler)
 
     app = QApplication(sys.argv)
     mw = BagBrowserMainWidget()
     mw.setWindowIcon(QIcon.fromTheme('system-search'))
+    w, h = 700, 500
+    mw.resize(w, h)
     mw.show()
     sys.exit(app.exec_())
