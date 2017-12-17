@@ -12,7 +12,7 @@ from cv_bridge import CvBridge, CvBridgeError
 
 from python_qt_binding import loadUi
 from python_qt_binding.QtCore import Qt, QTimer, Signal, Slot
-from python_qt_binding.QtGui import QIcon, QImage, QPixmap
+from python_qt_binding.QtGui import QIcon, QImage, QPixmap, QPalette
 from python_qt_binding.QtWidgets import QWidget, QFileDialog
 
 
@@ -53,6 +53,11 @@ class BagPlayer(object):
         l = [None] * (end_ms - start_ms + 1)
         for (_, msg, ts) in bag.read_messages(img_topicname):
             l[BagPlayer.rostime2msec(ts) - start_ms] = converter(msg)
+        if l[0] is None:
+            for ll in l:
+                if ll is not None:
+                    l[0] = ll
+                    break
         return l
 
     @staticmethod
@@ -67,6 +72,10 @@ class BagPlayer(object):
             print e
             return None
 
+    @staticmethod
+    def cvimg2qimg(cvimg):
+        height, width = cvimg.shape
+        return QImage(cvimg.data, width, height, QImage.Format_Grayscale8)
 
 class ImageViewWidget(QWidget):
     def __init__(self, title=None, image=None):
@@ -76,6 +85,8 @@ class ImageViewWidget(QWidget):
                                'resource',
                                'ImageView.ui')
         loadUi(ui_file, self)
+        self.qt_img_label.setBackgroundRole(QPalette.Base)
+        self.qt_img_label.setScaledContents(True)
         if title is not None:
             self.set_title(title)
         if image is not None:
@@ -85,6 +96,7 @@ class ImageViewWidget(QWidget):
         self.qt_imgtitle_label.setText(title)
 
     def set_image(self, pixmap):
+        self.qt_img_label.adjustSize()
         self.qt_img_label.setPixmap(pixmap)
 
 
@@ -102,6 +114,8 @@ class BagPlayerWidget(QWidget):
         self.qt_play_btn.setIcon(self._play_icon)
 
         self._playing = False
+        self._current_msec = 0
+        self._max_msec = 1000000
         self.qt_seekbar_slider.setTracking(False)
 
         self._play_timer = QTimer()
@@ -120,9 +134,7 @@ class BagPlayerWidget(QWidget):
 
     def show(self, bagpath):
         def converter(rosimg):
-            cvimg = BagPlayer.rosimg2cvimg(rosimg)
-            height, width = cvimg.shape
-            return QPixmap.fromImage(QImage(cvimg.data, width, height, QImage.Format_Grayscale8))
+            return QPixmap.fromImage(BagPlayer.cvimg2qimg(BagPlayer.rosimg2cvimg(rosimg)))
 
         self._bag_player = BagPlayer(bagpath, converter)
         self.qt_filename_label.setText(os.path.basename(bagpath))
@@ -183,7 +195,7 @@ class BagPlayerWidget(QWidget):
         val = self.qt_seekbar_slider.value()
         for i, ts in enumerate(self._timestamps):
             if ts > val:
-                self._current_msec = self._timestamps[max(i-1, 0)]
+                self._current_msec = self._timestamps[max(i - 1, 0)]
                 self.counter = i - 1
                 break
         self.update_images(self._current_msec)
